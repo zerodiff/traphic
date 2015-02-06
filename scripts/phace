@@ -1,0 +1,96 @@
+#!/bin/bash
+#
+# Given I want to send a message to a diff on Phabricator
+# When I run this script with a message and a diff number
+# Then send the message to Phabricator
+#
+
+# find our config
+baseGitDir="$(git rev-parse --show-toplevel)"
+fileToSource=$baseGitDir/.traphic
+if [ -f "$fileToSource" ]; then
+    . "$fileToSource"
+else
+    echo "Could not find .traphic file in base dir of git repo"
+    exit 1
+fi
+
+# sometimes the phobot.arcrc seems to have the wrong permssions
+chmod 400 $arcrc
+
+arc=$( which arc )
+if [ -z "$arc" ]; then
+    # On Travis, this will be checked out in the main working directory
+    arc="$baseGitDir/arcanist/bin/arc"
+fi
+
+# make sure we can actually find the arc command
+if [ ! -x "$arc" ]; then
+    echo "$0 could not find arc command"
+    exit 1
+fi
+
+message=$1
+revision=$2
+
+if [ -z "$2" ]; then
+    echo "Usage: $0 message revision"
+    exit 1
+fi
+
+function commentOnRevision {
+    local revsion=$1
+    local message=$2
+
+    # XXX careful here... we are not doing any JSON escaping of the message
+    # because it's not necessary for this particular use. The message coming
+    # in should be properly escaped if that's going to be an issue.
+    jsonRequest="{\"revision_id\":\"$revsion\",\"message\":\"$message\"}"
+
+    arcOutput=$(
+        echo $jsonRequest |
+        $arc call-conduit --conduit-uri="$phUrl" --arcrc-file "$arcrc" \
+        differential.createcomment 2>&1
+    )
+
+    # See if the output we got from arc is the expected JSON output,
+    # and get the error message.
+    jqOutput=$( echo $arcOutput | jq '.errorMessage' 2>&1 )
+    jqStatus=$?
+
+    # If the "errorMessage" is not "null", meaning there was a failure
+    # somewhere...
+    if [ "$jqOutput" != "null" ]; then
+        # If jq got valid JSON and could parse it ...
+        if [ "$jqStatus" -eq 0 ]; then
+            echo "$0: received Phabricator error while trying to add message to D$revsion:"
+            # remove quotes from beginning and end
+            arcError=${jqOutput%\"}
+            arcError=${jqOutput#\"}
+            echo "$jqOutput"
+        # jq did not get valid json
+        else
+            echo "$0: jq could not parse Pabricator output:"
+            echo "$arcOutput"
+            echo "jq error:"
+            echo $jqOutput
+        fi
+        # other debugging information
+        echo "using arc:"
+        echo $arc
+        echo "using arcrc:"
+        echo $arcrc
+        echo "message:"
+        echo $message
+        echo "json encoded message:"
+        echo $jsonMessage
+        echo "json sent:"
+        echo $jsonRequest
+        exit 1
+    fi
+}
+
+# doit
+commentOnRevision "$revision" "$message"
+
+exit 0

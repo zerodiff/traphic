@@ -1,0 +1,53 @@
+#!/bin/bash
+#
+# Given a Travis build is in state [starting|success|failure]
+# When the Travis build is a diff branch
+# Then comment on the Phabricate diff with the build status
+#
+# This is a wrapper around "phace" that just handles sending a
+# message to a diff on Phabricator.
+#
+# Note: All the TRAVIS_ variables are graciously sponsored by
+# Travis CI.  See:
+#
+# http://docs.travis-ci.com/user/ci-environment/#Environment-variables
+#
+
+# config
+travisUrl="https://magnum.travis-ci.com/alexwyler/UOrder/jobs/$TRAVIS_JOB_ID"
+phace=$(dirname "$0")/phace
+
+state=$1
+
+if [[ -z "$state" || ! "$state" =~ ^starting|success|failure$ ]]; then
+    echo "Usage: $0 starting|success|failure"
+    exit 1
+fi
+
+function buildMessage {
+    local state=$1
+
+    messageFormat="Travis says build [[ $travisUrl | $TRAVIS_JOB_NUMBER ]] %s !!!\n"
+    status="is SOMETHING WEIRD ($state)"
+    case $state in
+        "starting") status="is STARTING" ;;
+        "success") status="has SUCCEEDED" ;;
+        "failure") status="has FAILED" ;;
+    esac
+
+    printf "$messageFormat" "$status"
+}
+
+# Make sure it's a diff branch
+if [[ "$TRAVIS_BRANCH" =~ ^ES_D([[:digit:]]+) ]]; then
+    revision=${BASH_REMATCH[1]}
+fi
+
+if [ -n "$revision" ]; then
+    message=$( buildMessage $state )
+    "$phace" "$message" "$revision"
+else
+    echo "$0: branch $TRAVIS_BRANCH does not appear to be a Phabricator diff branch"
+fi
+
+exit 0
