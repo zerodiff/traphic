@@ -104,7 +104,7 @@ class PostDiffHook extends BaseHook {
         $gitCommand = escapeshellcmd("git push origin '$topicBranch:$remoteBranchName' --force");
 
         $this->writeOut(pht(
-            "Pushing to remote branch %s on GitHutb with this command:\n    %s\n",
+            "Pushing to remote branch %s on GitHub with this command:\n    %s\n",
             $remoteBranchName, $gitCommand));
 
         $exitCode = 0;
